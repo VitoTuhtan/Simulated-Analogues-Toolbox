@@ -46,11 +46,13 @@ size = CW.Get_size()
 h_unit = 'au**2/yr' 
 v_unit = 'au /yr'  
 m_unit = 'Msun'      
+r_unit = 'au'
+
 first_one = 2
 last_one = -1
 freq=1
 
-nshells = 30
+nshells = 50
 rmax = 500 # in au
 e=0.25 #height of the disk: hs=e*rs
 
@@ -150,6 +152,7 @@ def substractable_values(yt_shape,sink_position,sink_velocity, spin_axis):
     p_r_shape = (dens*yt_shape['cell_volume']*radial_v).sum()
     p_z_shape = (dens*yt_shape['cell_volume']*z_v).sum()
     Mshape = (dens*yt_shape['cell_volume']).sum()
+    print('MASS UNIT:',Mshape.units)
 
     p_phi_2shape = (dens*yt_shape['cell_volume']*angular_v**2).sum()
     p_r_2shape = (dens*yt_shape['cell_volume']*radial_v**2).sum()
@@ -318,12 +321,7 @@ for count,fil in enumerate(files[rank*files_perrank:(rank+1)*files_perrank]):
 
             if(average_v_phi>0.75*keplerian_v_shell and v_phi_dissipation < 0.3*average_v_phi and rs[shell]>5):
                 disk_size_condition.append(shell)
-
-        if(not disk_size_condition):
-            disk_size = 0
-        else:
-            disk_size=rs[disk_size_condition[-1]+1]
-        ################# HERE
+       
         v_phi_shellaverage = yt.YTArray(v_phi_shellaverage)
         v_r_shellaverage = yt.YTArray(v_r_shellaverage)
         v_z_shellaverage = yt.YTArray(v_z_shellaverage)
@@ -336,14 +334,22 @@ for count,fil in enumerate(files[rank*files_perrank:(rank+1)*files_perrank]):
         m_outer = yt.YTArray(m_outer)
         m_inner = yt.YTArray(m_inner)
 
+        if(not disk_size_condition):
+            disk_size = 0
+            disk_mass = yt.YTArray(0,m_unit)
+        else:
+            disk_size=rs[disk_size_condition[-1]+1]
+            disk_mass = (m_outer[:disk_size_condition[-1]+1] - m_inner[:disk_size_condition[-1]+1]).sum()
+            print('disk mass: ', disk_mass)
+
         save_units = {'distances': 'au','disk_size':'au', 'v_phi_shellaverage': str(v_phi_shellaverage.units) ,
         'v_phi_delta' : str(v_phi_dissipation.units) ,'v_r_shellaverage': str(v_r_shellaverage.units) ,'v_r_delta' : str(v_r_delta.units),
         'v_z_shellaverage': str(v_z_shellaverage.units) ,'v_phi_delta' : str(v_phi_delta.units), 'keplerian_v' : str(keplerian_v.units),
         'mass in 100 au ':str(mass_in_100.units),'accretion_rate':str(accretion_rate_primary.units),'luminosity':str(luminosity_primary.units),
-        'h_outer':str(gass_spin_refined.units),'h_inner':str(gass_spin_refined.units),'gass_spin_refined':str(gass_spin_refined.units),
+        'h_outer':str(gass_spin_refined.units),'h_inner':str(gass_spin_refined.units),'gass_spin_refined':str(gass_spin_refined.units), 'disk_mass':str(disk_mass.units),
         't_after_formation':str(t_after_formation.units)}
 
-        pickle_file = {'distances':rs,'disk size':disk_size,
+        pickle_file = {'distances':rs,'disk size':disk_size,'disk mass':disk_mass,
             'v_phi': v_phi_shellaverage.value,
             'v_phi error':v_phi_delta.value,
             'v_r':v_r_shellaverage.value,
@@ -359,9 +365,7 @@ for count,fil in enumerate(files[rank*files_perrank:(rank+1)*files_perrank]):
             'mass_in_100':mass_in_100.value,'accretion_rate_primary':accretion_rate_primary.value,'luminosity_primary':luminosity_primary.value,
             't_after_formation':t_after_formation,'output':nout,'primary sink tag':sink_tag,'secondary sink tag':secondary_sink_tag,'units':save_units,'rsink file':s}
                 
-#idisk
-#m_outer[idisk]
-#m_outer[:idisk+1].sum() - m_inner[:idisk+1].sum()
+
                 
 
         #ADD EFFECTIVE ROCHE RADIUS 
@@ -383,6 +387,8 @@ for count,fil in enumerate(files[rank*files_perrank:(rank+1)*files_perrank]):
                 
             
                 q = m1_u/m2_u
+                if q < 1: 
+                    q = 1/q 
                 roche_r =( 0.49*q**(2/3)/(0.6*q**(2/3)+np.log(1+q**(1/3))) )*separation
 
                 dm2 = s['dm'][secondary_sink_tag]*units['mass_unit']  #secondary accretion rate and luminosity is wrong - change after it is done.
